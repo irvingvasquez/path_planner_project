@@ -36,11 +36,17 @@ class MotionPlanning(Drone):
 
         # initial state
         self.flight_state = States.MANUAL
+        self.prm_g = []
+        self.prm_milestones = []
 
         # register all your callbacks here
         self.register_callback(MsgID.LOCAL_POSITION, self.local_position_callback)
         self.register_callback(MsgID.LOCAL_VELOCITY, self.velocity_callback)
         self.register_callback(MsgID.STATE, self.state_callback)
+    
+    def setPRM(self, graph, milestones):
+        self.prm_g = graph
+        self.prm_milestones = milestones
 
     def local_position_callback(self):
         if self.flight_state == States.TAKEOFF:
@@ -141,9 +147,6 @@ class MotionPlanning(Drone):
         # Read in obstacle map
         data = np.loadtxt('colliders.csv', delimiter=',', dtype='Float64', skiprows=2)
 
-        # create a PRM
-        g, milestones = prm.construct_prm(data)
-        prm.display_grid(data, g, milestones)
         
         # Define a grid for a particular altitude and safety margin around obstacles
         grid, north_offset, east_offset = create_grid(data, TARGET_ALTITUDE, SAFETY_DISTANCE)
@@ -156,34 +159,49 @@ class MotionPlanning(Drone):
 	# MAP scale is 1:1
         grid_start = (-north_offset + int(np.round(ned_current[0])), -east_offset + int(np.round(ned_current[1])))
         
-        cost = -1
-        while cost == -1:
+        cost2 = -1
+        while cost2 == -1:
             # Set goal as some arbitrary position on the grid
-            grid_goal = (-north_offset - 100, -east_offset - 100)
             # TODO: adapt to set goal as latitude / longitude position and convert
             # assuming that home is the center
             geo_min = local_to_global([north_offset, east_offset, 0], self.global_home)
             geo_max = local_to_global([-north_offset, -east_offset, 0], self.global_home)
             random = np.random.rand(3)
         
-            #geo_goal = geo_min + (np.multiply(geo_max-geo_min, random))
-            geo_goal = [-122.40078465, 37.79102309, 0]
+            geo_goal = geo_min + (np.multiply(geo_max-geo_min, random))
+            #geo_goal = [-122.40078465, 37.79102309, 0]
             print('Geodetic goal: ', geo_goal)
             ned_goal = global_to_local(geo_goal, self.global_home)
             grid_goal = (-north_offset + int(np.round(ned_goal[0])), -east_offset + int(np.round(ned_goal[1])))
+
+            #find the closest node
+            closest_start = prm.closest_point(self.prm_g, (ned_current[0], ned_current[1], TARGET_ALTITUDE))
+            closest_goal = prm.closest_point(self.prm_g, (ned_goal[0], ned_goal[1], TARGET_ALTITUDE))
 
             # Run A* to find a path from start to goal
             # TODO: add diagonal motions with a cost of sqrt(2) to your A* implementation
             # or move to a different search space such as a graph (not done here)
             print('Local Start and Goal: ', grid_start, grid_goal)
+            print('PRM Start and Goal: ', closest_start, closest_goal)
             path, cost = a_star(grid, heuristic, grid_start, grid_goal)
+            print(path[:10])
+            path2, cost2 = prm.a_star(self.prm_g, prm.heuristic, closest_start, closest_goal)
+            print(path2[:10])
             # TODO: prune path to minimize number of waypoints
             # TODO (if you're feeling ambitious): Try a different approach altogether!
 
         # Convert path to waypoints
         waypoints = [[p[0] + north_offset, p[1] + east_offset, TARGET_ALTITUDE, 0] for p in path]
+        print(waypoints[:10])
+        prm_waypoints = [[int(p[0]), int(p[1]), int(p[2]), 0] for p in path2]
+        print(prm_waypoints[:10])
         # Set self.waypoints
-        self.waypoints = waypoints
+        if cost2 == -1:
+            self.waypoints = waypoints
+        else:
+            print('setting prm path')
+            self.waypoints = prm_waypoints
+            #prm.display_path(data, self.prm_g, path2)
         # TODO: send waypoints to sim (this is just for visualization of waypoints)
         #self.send_waypoints()
 
@@ -206,8 +224,16 @@ if __name__ == "__main__":
     parser.add_argument('--host', type=str, default='127.0.0.1', help="host address, i.e. '127.0.0.1'")
     args = parser.parse_args()
 
+    # Read in obstacle map
+    data = np.loadtxt('colliders.csv', delimiter=',', dtype='Float64', skiprows=2)
+    # create a PRM
+
+    g, milestones = prm.construct_prm(data)
+    prm.display_grid(data, g, milestones)
+
     conn = MavlinkConnection('tcp:{0}:{1}'.format(args.host, args.port), timeout=60)
     drone = MotionPlanning(conn)
+    drone.setPRM(g, milestones)
     time.sleep(1)
 
     drone.start()
