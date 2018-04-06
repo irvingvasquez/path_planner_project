@@ -133,10 +133,11 @@ def a_star(grid, h, start, goal):
             path.append(branch[n][1])
             n = branch[n][1]
         path.append(branch[n][1])
-    else:
+    else: 
         print('**********************')
         print('Failed to find a path!')
         print('**********************') 
+        path_cost = -1
     return path[::-1], path_cost
 
 

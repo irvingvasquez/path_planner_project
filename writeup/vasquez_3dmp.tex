@@ -1,0 +1,28 @@
+\documentclass[]{article}
+
+%opening
+\title{3D motion planning problem}
+\author{Irving Vasquez}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+
+\end{abstract}
+
+\section{Explain the starter code}
+
+motion\_planning.py is the main script. It is a child class from Drone class. It is in charge of communicating with the drone and it reacts depending on the events coming from the drone. 
+
+The class follows the event programming paradigm. When the program starts, in \texttt{state\_callback()} function the drone goes from MANUAL state to ARMING, PLANNING, TAKE\_OFF, WAYPOINT, LANDING and DISARMING.
+
+For planning the path the \texttt{plan\_path()} function is used. Inside this function an arbitrary goal is defined. Then, A* is used to plan the path to such goal. A* uses an euclidean distance and all the actions have the same cost and they move the drone only in a 2D plane.
+
+\section{Found Issues}
+
+I found that when many waypoints are send to be displayed the program broke dawn.
+
+
+\end{document}
